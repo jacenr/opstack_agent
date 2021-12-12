@@ -1,15 +1,12 @@
 package main
 
 import (
-	_ "opstack_agent/routers"
-
-	beego "github.com/beego/beego/v2/server/web"
+	"fmt"
+	"opstack_agent/conf"
+	"opstack_agent/logs"
 )
 
 func main() {
-	if beego.BConfig.RunMode == "dev" {
-		beego.BConfig.WebConfig.DirectoryIndex = true
-		beego.BConfig.WebConfig.StaticDir["/swagger"] = "swagger"
-	}
-	beego.Run()
+	fmt.Println(conf.AgentConfData)
+	logs.Logger.Debug("test line1")
 }
