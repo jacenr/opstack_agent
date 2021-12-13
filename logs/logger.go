@@ -5,8 +5,14 @@ import (
 	"log"
 	"opstack_agent/conf"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"sync"
 	"time"
 )
+
+var lock sync.Mutex
 
 func getLogPath(dt string) string {
 	appDir, err := os.Getwd()
@@ -35,6 +41,40 @@ func (lh *LogHandler) rotate() {
 			panic("Open log f error: " + newLogName + err.Error())
 		}
 		lh.logger.SetOutput(newLogFile)
+		lh.dtSuffix = dt
+
+		// clean up old log files
+		dayNum := conf.AgentConfData["logDays"]
+		days, _ := strconv.Atoi(dayNum)
+		go func(logName string, rotateDay int) {
+			lock.Lock()
+			defer lock.Unlock()
+			err := filepath.Walk(filepath.Dir(logName), func(path string, info os.FileInfo, err error) error {
+				if info.IsDir() {
+					return nil
+				}
+				p, _ := regexp.Compile("agent_(\\d{4}-\\d{1,2}-\\d{1,2})\\.log")
+				if !p.MatchString(info.Name()) {
+					return nil
+				}
+				dtStr := p.FindStringSubmatch(info.Name())[1]
+				dtTmp, err := time.Parse("2006-1-2", dtStr)
+				if err != nil {
+					return err
+				}
+
+				if dtTmp.Before(time.Now().Add(-86400 * time.Duration(rotateDay) * time.Second)) {
+					err = os.Remove(path)
+					if err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				fmt.Printf("scan %s err: %s\n", filepath.Dir(newLogName), err.Error())
+			}
+		}(newLogName, days)
 	}
 }
 
@@ -50,6 +90,7 @@ func (lh *LogHandler) Debug(s string) {
 var Logger *LogHandler
 
 func init() {
+	lock = sync.Mutex{}
 	Logger = new(LogHandler)
 	Logger.rotate()
 }
